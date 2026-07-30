@@ -67,6 +67,13 @@ const mockRequestsData = {
   page: 1,
   pageSize: 25,
   totalPages: 1,
+  facets: {
+    statuses: ['pending', 'failed'],
+    users: [
+      { id: 'user-1', plexUsername: 'TestUser' },
+      { id: 'user-2', plexUsername: 'OtherUser' },
+    ],
+  },
 };
 
 const mockUsersData = {
@@ -192,6 +199,28 @@ describe('RecentRequestsTable', () => {
     // Check for status and user dropdowns via their options
     expect(screen.getByRole('option', { name: 'All Statuses' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'All Users' })).toBeInTheDocument();
+  });
+
+  it('limits filter dropdown options to the facet values from the API', () => {
+    const { container } = render(<RecentRequestsTable />);
+
+    const selects = container.querySelectorAll('select');
+    const statusSelect = selects[0] as HTMLSelectElement;
+    const userSelect = selects[1] as HTMLSelectElement;
+
+    // Only 'all' + facet statuses (canonical order), not the full static list.
+    expect(Array.from(statusSelect.options).map((o) => o.value)).toEqual([
+      'all',
+      'pending',
+      'failed',
+    ]);
+    // Only users returned by the facet.
+    expect(Array.from(userSelect.options).map((o) => o.value)).toEqual(['', 'user-1', 'user-2']);
+    expect(Array.from(userSelect.options).map((o) => o.text)).toEqual([
+      'All Users',
+      'TestUser',
+      'OtherUser',
+    ]);
   });
 
   it('deletes a request and refreshes caches', async () => {

@@ -19,15 +19,15 @@
 
 import { useState } from 'react';
 import { JOB_TYPE_LABELS } from '@/lib/constants/job-labels';
-import { STATUS_OPTIONS } from '@/lib/constants/log-filters';
-import { hasActiveFilters, hasActiveSearch } from '../types';
+import { getStatusLabel, STATUS_OPTIONS } from '@/lib/constants/log-filters';
+import { hasActiveFilters, hasActiveSearch, LogsFacets, VALID_STATUSES } from '../types';
 import { useRegisterPauseReason } from '../hooks/useAutoRefreshControl';
 import { useLogsUrlState } from '../hooks/useLogsUrlState';
 import DateRangePicker from './DateRangePicker';
 import UserTypeahead from './UserTypeahead';
 import { INPUT_CLASS, LABEL_CLASS } from './filter-styles';
 
-export default function LogsFilters() {
+export default function LogsFilters({ facets }: { facets?: LogsFacets }) {
   const { filters, setFilters, clearAll } = useLogsUrlState();
   const showClearAll = hasActiveFilters(filters) || hasActiveSearch(filters);
 
@@ -36,10 +36,12 @@ export default function LogsFilters() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
         <StatusDropdown
           value={filters.status}
+          available={facets?.statuses}
           onChange={(value) => setFilters({ status: value })}
         />
         <JobTypeDropdown
           value={filters.type}
+          available={facets?.types}
           onChange={(value) => setFilters({ type: value })}
         />
         <DateRangePicker
@@ -75,17 +77,48 @@ export default function LogsFilters() {
 }
 
 // ---------------------------------------------------------------------------
+// Facet ordering — canonical values first (in canonical order), unknown values
+// appended alphabetically so nothing the API reports is ever dropped.
+// ---------------------------------------------------------------------------
+function orderFacet(available: string[], canonical: readonly string[]): string[] {
+  const known = canonical.filter((v) => v !== 'all' && available.includes(v));
+  const unknown = available.filter((v) => !canonical.includes(v)).sort();
+  return [...known, ...unknown];
+}
+
+/** Fallback label for job types missing from JOB_TYPE_LABELS. */
+function prettifyJobType(key: string): string {
+  return key
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+// ---------------------------------------------------------------------------
 // Status dropdown
 // ---------------------------------------------------------------------------
 function StatusDropdown({
   value,
+  available,
   onChange,
 }: {
   value: string;
+  available?: string[];
   onChange: (value: string) => void;
 }) {
   const [focused, setFocused] = useState(false);
   useRegisterPauseReason('logs-status-dropdown', focused);
+  // Until facets load, fall back to the full static list so the current
+  // selection always has a matching option.
+  const options = available
+    ? [
+        { value: 'all', label: getStatusLabel('all') },
+        ...orderFacet(available, VALID_STATUSES).map((v) => ({
+          value: v,
+          label: getStatusLabel(v),
+        })),
+      ]
+    : STATUS_OPTIONS;
   return (
     <div>
       <label className={LABEL_CLASS} htmlFor="logs-status-filter">Status</label>
@@ -97,7 +130,7 @@ function StatusDropdown({
         onBlur={() => setFocused(false)}
         className={INPUT_CLASS}
       >
-        {STATUS_OPTIONS.map((opt) => (
+        {options.map((opt) => (
           <option key={opt.value} value={opt.value}>
             {opt.label}
           </option>
@@ -112,13 +145,18 @@ function StatusDropdown({
 // ---------------------------------------------------------------------------
 function JobTypeDropdown({
   value,
+  available,
   onChange,
 }: {
   value: string;
+  available?: string[];
   onChange: (value: string) => void;
 }) {
   const [focused, setFocused] = useState(false);
   useRegisterPauseReason('logs-type-dropdown', focused);
+  const typeKeys = available
+    ? orderFacet(available, Object.keys(JOB_TYPE_LABELS))
+    : Object.keys(JOB_TYPE_LABELS);
   return (
     <div>
       <label className={LABEL_CLASS} htmlFor="logs-type-filter">Job Type</label>
@@ -131,9 +169,9 @@ function JobTypeDropdown({
         className={INPUT_CLASS}
       >
         <option value="all">All Types</option>
-        {Object.entries(JOB_TYPE_LABELS).map(([key, label]) => (
+        {typeKeys.map((key) => (
           <option key={key} value={key}>
-            {label}
+            {JOB_TYPE_LABELS[key] ?? prettifyJobType(key)}
           </option>
         ))}
       </select>

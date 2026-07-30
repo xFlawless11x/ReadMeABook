@@ -152,6 +152,40 @@ describe('Admin blocklist list route', () => {
     });
   });
 
+  describe('facets', () => {
+    it('returns distinct sources from groupBy', async () => {
+      prismaMock.blockedRelease.groupBy.mockResolvedValueOnce([
+        { source: 'manual' },
+        { source: 'organize_fail' },
+      ]);
+      const { payload } = await callList();
+      expect(payload.facets.sources).toEqual(['manual', 'organize_fail']);
+    });
+
+    it('facet where excludes the source filter but keeps the other filters', async () => {
+      await callList('source=manual&search=foo');
+      const groupByArgs = prismaMock.blockedRelease.groupBy.mock.calls[0][0];
+      expect(groupByArgs.by).toEqual(['source']);
+      expect(groupByArgs.where.source).toBeUndefined();
+      expect(groupByArgs.where.OR).toEqual([
+        { releaseName: { contains: 'foo', mode: 'insensitive' } },
+        { reason: { contains: 'foo', mode: 'insensitive' } },
+      ]);
+    });
+
+    it('appends the selected source when absent from the facet rows', async () => {
+      prismaMock.blockedRelease.groupBy.mockResolvedValueOnce([{ source: 'manual' }]);
+      const { payload } = await callList('source=download_fail');
+      expect(payload.facets.sources).toEqual(['manual', 'download_fail']);
+    });
+
+    it('does not append invalid or "all" source selections', async () => {
+      prismaMock.blockedRelease.groupBy.mockResolvedValueOnce([{ source: 'manual' }]);
+      const { payload } = await callList('source=bogus');
+      expect(payload.facets.sources).toEqual(['manual']);
+    });
+  });
+
   describe('limit clamp', () => {
     const cases: Array<[string | null, number]> = [
       ['25', 25],

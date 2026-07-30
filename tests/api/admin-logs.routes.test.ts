@@ -226,6 +226,48 @@ describe('Admin logs route', () => {
     }
   });
 
+  describe('facets', () => {
+    it('returns distinct statuses and types from groupBy', async () => {
+      prismaMock.job.groupBy
+        .mockResolvedValueOnce([{ status: 'completed' }, { status: 'failed' }])
+        .mockResolvedValueOnce([{ type: 'scan_plex' }, { type: 'search_indexers' }]);
+      const { payload } = await callRoute();
+      expect(payload.facets.statuses).toEqual(['completed', 'failed']);
+      expect(payload.facets.types).toEqual(['scan_plex', 'search_indexers']);
+    });
+
+    it('each facet where excludes its own filter but keeps the other filters', async () => {
+      await callRoute('status=failed&type=scan_plex&userId=user-1');
+      const statusGroupArgs = prismaMock.job.groupBy.mock.calls[0][0];
+      expect(statusGroupArgs.by).toEqual(['status']);
+      expect(statusGroupArgs.where.status).toBeUndefined();
+      expect(statusGroupArgs.where.type).toBe('scan_plex');
+      expect(statusGroupArgs.where.request).toEqual({ is: { userId: 'user-1' } });
+      const typeGroupArgs = prismaMock.job.groupBy.mock.calls[1][0];
+      expect(typeGroupArgs.by).toEqual(['type']);
+      expect(typeGroupArgs.where.type).toBeUndefined();
+      expect(typeGroupArgs.where.status).toBe('failed');
+    });
+
+    it('appends the selected status and type when absent from the facet rows', async () => {
+      prismaMock.job.groupBy
+        .mockResolvedValueOnce([{ status: 'completed' }])
+        .mockResolvedValueOnce([{ type: 'scan_plex' }]);
+      const { payload } = await callRoute('status=failed&type=audible_refresh');
+      expect(payload.facets.statuses).toEqual(['completed', 'failed']);
+      expect(payload.facets.types).toEqual(['scan_plex', 'audible_refresh']);
+    });
+
+    it('does not append "all" or empty selections', async () => {
+      prismaMock.job.groupBy
+        .mockResolvedValueOnce([{ status: 'completed' }])
+        .mockResolvedValueOnce([]);
+      const { payload } = await callRoute('status=all');
+      expect(payload.facets.statuses).toEqual(['completed']);
+      expect(payload.facets.types).toEqual([]);
+    });
+  });
+
   describe('pagination math', () => {
     it('page=2 with limit=50 and total=75 returns totalPages=2 and skip=50', async () => {
       prismaMock.job.findMany.mockResolvedValueOnce([]);

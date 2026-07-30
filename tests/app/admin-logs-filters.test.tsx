@@ -116,6 +116,26 @@ describe('LogsFilters', () => {
     ]);
   });
 
+  it('limits Status options to the facet values (canonical order, "all" first)', () => {
+    render(<LogsFilters facets={{ statuses: ['failed', 'completed'], types: [] }} />);
+    const select = screen.getByLabelText('Status') as HTMLSelectElement;
+    const values = Array.from(select.options).map((o) => o.value);
+    expect(values).toEqual(['all', 'completed', 'failed']);
+  });
+
+  it('limits Job Type options to the facet values and keeps unknown types', () => {
+    render(
+      <LogsFilters
+        facets={{ statuses: [], types: ['scan_plex', 'search_indexers', 'mystery_job'] }}
+      />
+    );
+    const select = screen.getByLabelText('Job Type') as HTMLSelectElement;
+    const values = Array.from(select.options).map((o) => o.value);
+    expect(values).toEqual(['all', 'search_indexers', 'scan_plex', 'mystery_job']);
+    // Unknown type gets a prettified fallback label.
+    expect(Array.from(select.options).at(-1)?.text).toBe('Mystery Job');
+  });
+
   it('calls setFilters({ status }) when the Status dropdown changes', () => {
     render(<LogsFilters />);
     const select = screen.getByLabelText('Status') as HTMLSelectElement;

@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
 
         const skip = (page - 1) * limit;
 
-        const [entries, totalCount] = await Promise.all([
+        const [entries, totalCount, sourceFacet] = await Promise.all([
           prisma.blockedRelease.findMany({
             where,
             select: {
@@ -158,7 +158,32 @@ export async function GET(request: NextRequest) {
             take: limit,
           }),
           prisma.blockedRelease.count({ where }),
+          prisma.blockedRelease.groupBy({
+            by: ['source'],
+            where: buildBlocklistWhere({
+              requestId: searchParams.get('requestId'),
+              source: null,
+              search: searchParams.get('search'),
+              dateFrom: searchParams.get('dateFrom'),
+              dateTo: searchParams.get('dateTo'),
+            }),
+          }),
         ]);
+
+        // Facet list drives the Source dropdown: only values present in the
+        // dataset (narrowed by the OTHER active filters) are offered. The
+        // currently-selected source is always included so an active filter
+        // stays visible and clearable even when it no longer matches rows.
+        const sources = sourceFacet.map((row) => row.source);
+        const selectedSource = trim(searchParams.get('source'));
+        if (
+          selectedSource &&
+          selectedSource !== 'all' &&
+          (VALID_SOURCES as readonly string[]).includes(selectedSource) &&
+          !sources.includes(selectedSource)
+        ) {
+          sources.push(selectedSource);
+        }
 
         return NextResponse.json({
           entries,
@@ -168,6 +193,7 @@ export async function GET(request: NextRequest) {
             total: totalCount,
             totalPages: Math.max(1, Math.ceil(totalCount / limit)),
           },
+          facets: { sources },
         });
       } catch (error) {
         logger.error('Failed to fetch blocklist', {

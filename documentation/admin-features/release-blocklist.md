@@ -60,7 +60,7 @@ Delete behavior:
 ### `GET /api/admin/blocklist`
 Query params: `requestId`, `source`, `search` (contains-OR over `releaseName`+`reason`, case-insensitive), `dateFrom`, `dateTo`, `page`, `limit` (25/50/100), `sortBy` (`createdAt`|`releaseName`|`reason`), `sortOrder` (`asc`|`desc`).
 
-Response: `{ entries: BlockedReleaseRow[], pagination: { page, limit, total, totalPages } }`. Each `entries` row includes the joined `request.audiobook` + `request.user` for display and `request.deletedAt` for the "(deleted)" badge.
+Response: `{ entries: BlockedReleaseRow[], pagination: { page, limit, total, totalPages }, facets: { sources[] } }`. Each `entries` row includes the joined `request.audiobook` + `request.user` for display and `request.deletedAt` for the "(deleted)" badge. `facets.sources` = distinct sources narrowed by the OTHER active filters (excludes the source filter itself); the selected source is always included.
 
 ### `DELETE /api/admin/blocklist`
 Filter-scoped — passes the same query params used for the GET. Returns `{ count }`. UI gates with a typed-token modal ("CLEAR"); auth/role is the server-side security boundary.
@@ -77,7 +77,7 @@ Mirrors `/admin/logs` patterns: URL ↔ state via `useBlocklistUrlState`, SWR wi
 
 - **Columns:** Release name (verbatim), Reason (+ expand chevron for detail), Source badge, Associated request (title + author + user, with "(deleted)" badge if soft-deleted), Indexer, Blocked at (relative; title attribute = absolute), Actions.
 - **Per-row Unblock:** real `<button>`, optimistic update, toast on success/failure.
-- **Filters:** Source dropdown, Date range (shared with logs preset list), free-text search.
+- **Filters:** Source dropdown (dynamic: only sources present in data, from API facets), Date range (shared with logs preset list), free-text search.
 - **Sort:** clickable column headers on Release name / Reason / Blocked at; URL-driven; persists in shareable link.
 - **Bulk Clear (`Clear filtered (N)` or `Clear all (N)`):** opens a typed-token confirmation modal. Button label adapts to active filter state.
 - **Empty states:** "fresh" / "filters-too-tight" / "search-no-match" — pure function of `{ total, hasFilters, hasSearch }`.

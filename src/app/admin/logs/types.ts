@@ -124,9 +124,17 @@ export interface LogsPagination {
   totalPages: number;
 }
 
+// Facet lists returned by the API: distinct values present in the dataset
+// narrowed by the other active filters. Drive the dynamic filter dropdowns.
+export interface LogsFacets {
+  statuses: string[];
+  types: string[];
+}
+
 export interface LogsData {
   logs: Log[];
   pagination: LogsPagination;
+  facets?: LogsFacets;
 }
 
 // ---------------------------------------------------------------------------

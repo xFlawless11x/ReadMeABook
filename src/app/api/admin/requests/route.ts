@@ -43,29 +43,35 @@ export async function GET(request: NextRequest) {
           : 'desc';
 
         // Build where clause
-        const where: Prisma.RequestWhereInput = {
-          deletedAt: null,
+        const buildWhere = (opts: { status: string; userId: string }): Prisma.RequestWhereInput => {
+          const clause: Prisma.RequestWhereInput = {
+            deletedAt: null,
+          };
+
+          // Filter by status
+          if (opts.status && opts.status !== 'all') {
+            clause.status = opts.status;
+          }
+
+          // Filter by user
+          if (opts.userId) {
+            clause.userId = opts.userId;
+          }
+
+          // Search by title or author
+          if (search) {
+            clause.audiobook = {
+              OR: [
+                { title: { contains: search, mode: 'insensitive' } },
+                { author: { contains: search, mode: 'insensitive' } },
+              ],
+            };
+          }
+
+          return clause;
         };
 
-        // Filter by status
-        if (status && status !== 'all') {
-          where.status = status;
-        }
-
-        // Filter by user
-        if (userId) {
-          where.userId = userId;
-        }
-
-        // Search by title or author
-        if (search) {
-          where.audiobook = {
-            OR: [
-              { title: { contains: search, mode: 'insensitive' } },
-              { author: { contains: search, mode: 'insensitive' } },
-            ],
-          };
-        }
+        const where = buildWhere({ status, userId });
 
         // Build orderBy clause
         let orderBy: Prisma.RequestOrderByWithRelationInput;
@@ -91,6 +97,38 @@ export async function GET(request: NextRequest) {
 
         // Get total count for pagination
         const total = await prisma.request.count({ where });
+
+        // Facet lists drive the filter dropdowns: only values present in the
+        // dataset (narrowed by the OTHER active filters) are offered. The
+        // currently-selected value is always included so an active filter
+        // stays visible and clearable even when it no longer matches rows.
+        const [statusFacet, userFacet] = await Promise.all([
+          prisma.request.groupBy({
+            by: ['status'],
+            where: buildWhere({ status: 'all', userId }),
+          }),
+          prisma.request.groupBy({
+            by: ['userId'],
+            where: buildWhere({ status, userId: '' }),
+          }),
+        ]);
+
+        const statuses = statusFacet.map((row) => row.status);
+        if (status && status !== 'all' && !statuses.includes(status)) {
+          statuses.push(status);
+        }
+
+        const facetUserIds = userFacet.map((row) => row.userId);
+        if (userId && !facetUserIds.includes(userId)) {
+          facetUserIds.push(userId);
+        }
+        const users = facetUserIds.length
+          ? await prisma.user.findMany({
+              where: { id: { in: facetUserIds } },
+              select: { id: true, plexUsername: true },
+              orderBy: { plexUsername: 'asc' },
+            })
+          : [];
 
         // Get paginated requests
         const requests = await prisma.request.findMany({
@@ -155,6 +193,7 @@ export async function GET(request: NextRequest) {
           page,
           pageSize,
           totalPages: Math.ceil(total / pageSize),
+          facets: { statuses, users },
         });
       } catch (error) {
         logger.error('Failed to fetch requests', {

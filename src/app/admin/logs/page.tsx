@@ -156,7 +156,7 @@ function AdminLogsPageContent() {
         <LogsToolbar />
 
         {/* Filter dropdowns + chip strip — owned by ben-filters, rendered here. */}
-        <LogsFilters />
+        <LogsFilters facets={data?.facets} />
         <ActiveFilterChips />
 
         {error && (

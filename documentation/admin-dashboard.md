@@ -27,9 +27,10 @@ Comprehensive overview of system metrics, active requests, download monitoring, 
 
 **GET /api/admin/requests** (Paginated)
 - Query params: `page`, `pageSize` (10|25|50|100), `search`, `status`, `userId`, `sortBy`, `sortOrder`
-- Returns: `requests[]`, `total`, `page`, `pageSize`, `totalPages`
+- Returns: `requests[]`, `total`, `page`, `pageSize`, `totalPages`, `facets: { statuses[], users[] }`
 - Sorting: createdAt (default), completedAt, title, user, status
 - Filtering: by status, by user, text search (title/author)
+- Facets: distinct values narrowed by the OTHER active filters (status facet excludes status filter, user facet excludes userId filter); selected value always included; `users` = `{ id, plexUsername }[]` sorted by username
 
 **GET /api/admin/requests/recent** (Legacy)
 - Request ID, title, user, status, created/completed dates
@@ -68,14 +69,16 @@ Comprehensive overview of system metrics, active requests, download monitoring, 
 - search: free text → 6-column OR: bullJobId (startsWith, case-sensitive), errorMessage (contains-i), events.some.message (contains-i), request.audiobook.title/author (contains-i), request.user.plexUsername (contains-i)
 - hasError + search combine under top-level `AND`; other filters compose via AND on `where`
 - Where-builder: exported `buildLogsWhere(params)` in route file (pure, testable)
-- Returns: `{ logs, pagination: { page, limit, total, totalPages } }`
+- Returns: `{ logs, pagination: { page, limit, total, totalPages }, facets: { statuses[], types[] } }`
+- Facets: distinct Job statuses/types narrowed by the OTHER active filters (each facet excludes its own filter); selected value always included so an active filter stays visible/clearable
 
 ## Request Management Features
 
 - **Filter Bar:**
   - Text search (title/author, 300ms debounce)
-  - Status dropdown (all statuses)
-  - User dropdown (all users)
+  - Status dropdown (dynamic: only statuses present in data, from API facets)
+  - User dropdown (dynamic: only users with matching requests, from API facets)
+  - Dropdown options freeze while focused so 10s auto-refresh can't shift entries mid-pick
   - Clear filters button
 - **Sortable Columns:** Click headers to sort by title, user, status, requested, completed
 - **Pagination:** Page navigation, page size selector (10/25/50/100), results count

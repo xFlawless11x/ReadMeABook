@@ -39,12 +39,18 @@ interface User {
   plexUsername: string;
 }
 
+interface RequestFacets {
+  statuses: string[];
+  users: User[];
+}
+
 interface RequestsResponse {
   requests: RecentRequest[];
   total: number;
   page: number;
   pageSize: number;
   totalPages: number;
+  facets?: RequestFacets;
 }
 
 interface RecentRequestsTableProps {
@@ -72,6 +78,29 @@ const STATUS_OPTIONS = [
 ];
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
+// Build the status dropdown options from the API's facet list: only statuses
+// present in the data (narrowed by the other active filters) are offered,
+// ordered canonically, with unknown values appended so nothing is dropped.
+function buildStatusOptions(available: string[]): typeof STATUS_OPTIONS {
+  const known = STATUS_OPTIONS.filter(
+    (opt) => opt.value !== 'all' && available.includes(opt.value)
+  );
+  const knownValues = STATUS_OPTIONS.map((opt) => opt.value);
+  const unknown = available
+    .filter((v) => !knownValues.includes(v))
+    .sort()
+    .map((v) => ({ value: v, label: v.charAt(0).toUpperCase() + v.slice(1) }));
+  return [STATUS_OPTIONS[0], ...known, ...unknown];
+}
+
+// While a select is focused (its popup may be open), keep serving the last
+// pre-focus options so the 10s auto-refresh doesn't shift entries mid-pick.
+function useFrozenWhileFocused<T>(options: T, focused: boolean): T {
+  const frozenRef = useRef(options);
+  if (!focused) frozenRef.current = options;
+  return focused ? frozenRef.current : options;
+}
 
 type SortField = 'createdAt' | 'completedAt' | 'title' | 'user' | 'status';
 type SortOrder = 'asc' | 'desc';
@@ -210,8 +239,15 @@ export function RecentRequestsTable({ ebookSidecarEnabled = false, annasArchiveB
     keepPreviousData: true, // Keep showing old data while fetching new data to prevent layout shifts
   });
 
-  // Fetch users for filter dropdown
-  const { data: usersData } = useSWR<{ users: User[] }>('/api/admin/users', authenticatedFetcher);
+  // Dynamic filter options come from the API's facet lists; freeze them while
+  // the corresponding select is focused so auto-refresh doesn't shift entries.
+  const [statusFocused, setStatusFocused] = useState(false);
+  const [userFocused, setUserFocused] = useState(false);
+  const statusOptions = useFrozenWhileFocused(
+    data?.facets ? buildStatusOptions(data.facets.statuses) : STATUS_OPTIONS,
+    statusFocused
+  );
+  const userOptions = useFrozenWhileFocused(data?.facets?.users ?? [], userFocused);
 
   // Build URL string for syncing
   const buildUrlString = useCallback((params: {
@@ -538,9 +574,11 @@ export function RecentRequestsTable({ ebookSidecarEnabled = false, annasArchiveB
           <select
             value={status}
             onChange={(e) => updateFilter('status', e.target.value)}
+            onFocus={() => setStatusFocused(true)}
+            onBlur={() => setStatusFocused(false)}
             className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm min-w-[160px]"
           >
-            {STATUS_OPTIONS.map((option) => (
+            {statusOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
@@ -551,10 +589,12 @@ export function RecentRequestsTable({ ebookSidecarEnabled = false, annasArchiveB
           <select
             value={userId}
             onChange={(e) => updateFilter('userId', e.target.value)}
+            onFocus={() => setUserFocused(true)}
+            onBlur={() => setUserFocused(false)}
             className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm min-w-[160px]"
           >
             <option value="">All Users</option>
-            {usersData?.users.map((user) => (
+            {userOptions.map((user) => (
               <option key={user.id} value={user.id}>
                 {user.plexUsername}
               </option>

@@ -105,9 +105,16 @@ export interface BlocklistPagination {
   totalPages: number;
 }
 
+// Facet list returned by the API: distinct sources present in the dataset
+// narrowed by the other active filters. Drives the dynamic Source dropdown.
+export interface BlocklistFacets {
+  sources: string[];
+}
+
 export interface BlocklistData {
   entries: BlockedReleaseRow[];
   pagination: BlocklistPagination;
+  facets?: BlocklistFacets;
 }
 
 // ---------------------------------------------------------------------------
