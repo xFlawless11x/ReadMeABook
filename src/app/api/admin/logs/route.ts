@@ -138,7 +138,7 @@ export async function GET(request: NextRequest) {
         const page = parsePage(searchParams.get('page'));
         const limit = parseLimit(searchParams.get('limit'));
 
-        const where = buildLogsWhere({
+        const whereParams: LogsWhereParams = {
           status: searchParams.get('status'),
           type: searchParams.get('type'),
           search: searchParams.get('search'),
@@ -147,11 +147,12 @@ export async function GET(request: NextRequest) {
           hasError: searchParams.get('hasError'),
           userId: searchParams.get('userId'),
           audiobookQuery: searchParams.get('audiobookQuery'),
-        });
+        };
+        const where = buildLogsWhere(whereParams);
 
         const skip = (page - 1) * limit;
 
-        const [logs, totalCount] = await Promise.all([
+        const [logs, totalCount, statusFacet, typeFacet] = await Promise.all([
           prisma.job.findMany({
             where,
             select: {
@@ -205,7 +206,30 @@ export async function GET(request: NextRequest) {
             take: limit,
           }),
           prisma.job.count({ where }),
+          prisma.job.groupBy({
+            by: ['status'],
+            where: buildLogsWhere({ ...whereParams, status: null }),
+          }),
+          prisma.job.groupBy({
+            by: ['type'],
+            where: buildLogsWhere({ ...whereParams, type: null }),
+          }),
         ]);
+
+        // Facet lists drive the filter dropdowns: only values present in the
+        // dataset (narrowed by the OTHER active filters) are offered. The
+        // currently-selected value is always included so an active filter
+        // stays visible and clearable even when it no longer matches rows.
+        const statuses = statusFacet.map((row) => row.status);
+        const selectedStatus = trim(whereParams.status);
+        if (selectedStatus && selectedStatus !== 'all' && !statuses.includes(selectedStatus)) {
+          statuses.push(selectedStatus);
+        }
+        const types = typeFacet.map((row) => row.type);
+        const selectedType = trim(whereParams.type);
+        if (selectedType && selectedType !== 'all' && !types.includes(selectedType)) {
+          types.push(selectedType);
+        }
 
         return NextResponse.json({
           logs,
@@ -215,6 +239,7 @@ export async function GET(request: NextRequest) {
             total: totalCount,
             totalPages: Math.ceil(totalCount / limit),
           },
+          facets: { statuses, types },
         });
       } catch (error) {
         logger.error('Failed to fetch logs', { error: error instanceof Error ? error.message : String(error) });

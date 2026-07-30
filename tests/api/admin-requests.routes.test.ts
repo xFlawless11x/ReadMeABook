@@ -232,6 +232,50 @@ describe('Admin requests routes', () => {
     );
   });
 
+  it('returns dropdown facets narrowed by the other active filters', async () => {
+    prismaMock.request.count.mockResolvedValueOnce(0);
+    prismaMock.request.findMany.mockResolvedValueOnce([]);
+    prismaMock.request.groupBy
+      .mockResolvedValueOnce([{ status: 'pending' }, { status: 'completed' }])
+      .mockResolvedValueOnce([{ userId: 'u-1' }]);
+    prismaMock.user.findMany.mockResolvedValueOnce([{ id: 'u-1', plexUsername: 'alice' }]);
+
+    const { GET } = await import('@/app/api/admin/requests/route');
+    const response = await GET({
+      url: 'http://localhost/api/admin/requests?status=failed&userId=u-2',
+    } as any);
+    const payload = await response.json();
+
+    // Status facet keeps the user filter but drops the status filter.
+    const statusGroupArgs = prismaMock.request.groupBy.mock.calls[0][0];
+    expect(statusGroupArgs.by).toEqual(['status']);
+    expect(statusGroupArgs.where.status).toBeUndefined();
+    expect(statusGroupArgs.where.userId).toBe('u-2');
+    // User facet keeps the status filter but drops the user filter.
+    const userGroupArgs = prismaMock.request.groupBy.mock.calls[1][0];
+    expect(userGroupArgs.by).toEqual(['userId']);
+    expect(userGroupArgs.where.userId).toBeUndefined();
+    expect(userGroupArgs.where.status).toBe('failed');
+    // Selected values are appended even when absent from the facet rows.
+    expect(payload.facets.statuses).toEqual(['pending', 'completed', 'failed']);
+    expect(prismaMock.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: { in: ['u-1', 'u-2'] } } })
+    );
+    expect(payload.facets.users).toEqual([{ id: 'u-1', plexUsername: 'alice' }]);
+  });
+
+  it('skips the user lookup when no users have matching requests', async () => {
+    prismaMock.request.count.mockResolvedValueOnce(0);
+    prismaMock.request.findMany.mockResolvedValueOnce([]);
+
+    const { GET } = await import('@/app/api/admin/requests/route');
+    const response = await GET({ url: 'http://localhost/api/admin/requests' } as any);
+    const payload = await response.json();
+
+    expect(prismaMock.user.findMany).not.toHaveBeenCalled();
+    expect(payload.facets).toEqual({ statuses: [], users: [] });
+  });
+
   it('soft deletes a request via delete service', async () => {
     deleteRequestMock.mockResolvedValueOnce({
       success: true,

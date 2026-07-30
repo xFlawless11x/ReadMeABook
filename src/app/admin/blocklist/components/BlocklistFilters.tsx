@@ -13,6 +13,7 @@
 
 import { useBlocklistUrlState } from '../hooks/useBlocklistUrlState';
 import {
+  BlocklistFacets,
   BlockSourceFilter,
   hasActiveFilters,
   hasActiveSearch,
@@ -22,7 +23,7 @@ import {
 import BlocklistDateRangePicker from './BlocklistDateRangePicker';
 import { INPUT_CLASS, LABEL_CLASS } from '@/app/admin/logs/components/filter-styles';
 
-export default function BlocklistFilters() {
+export default function BlocklistFilters({ facets }: { facets?: BlocklistFacets }) {
   const { filters, setFilters, clearAll } = useBlocklistUrlState();
   const showClearAll = hasActiveFilters(filters) || hasActiveSearch(filters);
 
@@ -31,6 +32,7 @@ export default function BlocklistFilters() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         <SourceDropdown
           value={filters.source}
+          available={facets?.sources}
           onChange={(value) => setFilters({ source: value })}
         />
         <BlocklistDateRangePicker
@@ -59,11 +61,19 @@ export default function BlocklistFilters() {
 
 function SourceDropdown({
   value,
+  available,
   onChange,
 }: {
   value: BlockSourceFilter;
+  available?: string[];
   onChange: (value: BlockSourceFilter) => void;
 }) {
+  // Only offer sources present in the data (canonical order preserved);
+  // 'all' always renders. Until facets load, fall back to the full list so
+  // the current selection always has a matching option.
+  const options = available
+    ? VALID_SOURCES.filter((opt) => opt === 'all' || available.includes(opt))
+    : VALID_SOURCES;
   return (
     <div>
       <label className={LABEL_CLASS} htmlFor="blocklist-source-filter">Source</label>
@@ -73,7 +83,7 @@ function SourceDropdown({
         onChange={(e) => onChange(e.target.value as BlockSourceFilter)}
         className={INPUT_CLASS}
       >
-        {VALID_SOURCES.map((opt) => (
+        {options.map((opt) => (
           <option key={opt} value={opt}>
             {SOURCE_LABELS[opt]}
           </option>
